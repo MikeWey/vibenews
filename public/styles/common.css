@@ -337,6 +337,10 @@ input.checkbox { width: auto; }
 	color: #888;
 }
 
+div.email2 {
+	display: none;
+}
+
 input, textarea {
 	width: 100%;
 	font-size: 10pt;

@@ -361,6 +361,11 @@ class WebInterface {
 		string subject = req.form["subject"].strip();
 		string message = req.form["message"];
 
+		if( !loggedin && !(req.form["confirmemail"].strip().empty) ){
+			res.redirect("/groups/"~grp.name~"/", HttpStatus.Found);
+			return;
+		}
+
 		try {
 			validateEmail(email);
 			validateString(name, 3, 64, "The poster name");
