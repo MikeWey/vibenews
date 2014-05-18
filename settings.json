@@ -1,0 +1,10 @@
+{
+	"title": "GtkD Forum",
+	"description": "GtkD discussion forum",
+	"host": "forum.gtkd.org",
+	"nntpPort": 119,
+	"webPort": 8009,
+	"adminPort": 9009,
+	"googleSearch": true,
+	"showOverviewAvatars": false,
+}
