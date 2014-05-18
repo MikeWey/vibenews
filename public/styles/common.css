@@ -201,12 +201,12 @@ a.title {
 	color: black;
 }
 
-#content tr.odd td {
-	background-color: #fdfdf8;
+#content td.odd {
+	background-color: #eee;
 }
 
-#content tr.even td {
-	background-color: #f8f6ec;
+#content td.even {
+	background-color: #ddd;
 }
 
 #content table.overview .avatar {
