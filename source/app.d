@@ -27,8 +27,8 @@ shared static this()
 	//settings.spamFilters ~= new BlackListSpamFilter;
 	//settings.spamFilters ~= new BayesSpamFilter;
 
-	if( existsFile("settings.json") ){
-		auto data = stripUTF8Bom(cast(string)openFile("settings.json").readAll());
+	if( existsFile("/etc/vibe/vibenews.conf") ){
+		auto data = stripUTF8Bom(cast(string)openFile("/etc/vibe/vibenews.conf").readAll());
 		auto json = parseJson(data);
 		settings.parseSettings(json);
 	}
