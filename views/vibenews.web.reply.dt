@@ -16,11 +16,6 @@ block vibenews.navigation
 		- if( auto prp = "thread" in req.query )
 			li
 				a(href="#{info.group.name}/thread/#{*prp}/")= info.threadSubject
-			li
-				a(href="./post?group=#{info.group.name}&thread=#{*prp}&reply-to=#{req.query[`reply-to`]}") Reply
-		- else
-			li
-				a(href="./post?group=#{info.group.name}") Post new topic
 
 block vibenews.body
 	- if( info.error.length )

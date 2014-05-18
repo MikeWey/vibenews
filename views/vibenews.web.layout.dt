@@ -37,5 +37,6 @@ block body
 	#content
 		block vibenews.body
 
+block footer
 	footer
 		p This forum is powered by <a href="https://github.com/rejectedsoftware/vibenews">VibeNews</a> and can also be accessed using a news reader pointed to <a href="nntp://#{info.settings.hostName}/">nntp://#{info.settings.hostName}/</a>.

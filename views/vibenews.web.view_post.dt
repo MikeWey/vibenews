@@ -20,8 +20,6 @@ block vibenews.navigation
 			a(href="../")= info.group.caption
 		li
 			a(href="../thread/#{info.thread.firstPost.number}/") Back to thread
-		li
-			a(href=".")= info.post.subject
 
 block vibenews.body
 	include vibenews.inc.gravatar

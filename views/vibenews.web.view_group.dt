@@ -10,8 +10,6 @@ block vibenews.navigation
 	ul
 		li
 			a(href="../../")= forumIndexNavCaption
-		li
-			a(href="./")= info.group.caption
 
 block vibenews.body
 	include vibenews.inc.gravatar
