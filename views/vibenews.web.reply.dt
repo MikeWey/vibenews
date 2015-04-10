@@ -65,6 +65,9 @@ block vibenews.body
 						div
 							label(for="email") Email:
 							input#email(type="email", name="email", value="#{info.email}")
+						div#confirmemail
+							label(for="email") Leave this blank if you are human:
+							input#confirmemail(type="email", name="confirmemail", value="")
 					div
 						label(for="subject") Subject:
 						input#subject(type="text", name="subject", value="#{info.subject}")

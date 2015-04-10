@@ -201,12 +201,12 @@ a.title {
 	color: black;
 }
 
-#content td.odd {
-	background-color: #eee;
+#content tr.odd td {
+	background-color: #fdfdf8;
 }
 
-#content td.even {
-	background-color: #ddd;
+#content tr.even td {
+	background-color: #f8f6ec;
 }
 
 #content table.overview .avatar {
@@ -389,6 +389,7 @@ td form { display: inline-block; }
 #content td.ham { background-color: #8d4; }
 #content td.undecided { background-color: #999; }
 
+#confirmemail { display: none; }
 
 /* side-by-side preview pane for post authoring */
 @media (min-width: 900pt) {
