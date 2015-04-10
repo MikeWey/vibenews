@@ -140,7 +140,7 @@ deprecated alias listenNNTP = listenNNTP;
 
 class NNTPServerSettings {
 	ushort port = 119; // SSL port is 563
-	string[] bindAddresses = ["0.0.0.0"];
+	string[] bindAddresses = ["0.0.0.0", "::"];
 	string host = "localhost"; // host name
 	SSLContext sslContext;
 	bool requireSSL = false; // require STARTTLS on unencrypted connections
