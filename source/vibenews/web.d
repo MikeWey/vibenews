@@ -12,7 +12,7 @@ import vibenews.message;
 import vibenews.vibenews;
 
 import antispam.antispam;
-import userman.web : UserManController, UserManWebInterface, User;
+import userman.web : UserManController, UserManWebAuthenticator, User, updateProfile, registerUserManWebInterface;
 
 import vibe.core.core;
 import vibe.core.log;
@@ -43,7 +43,7 @@ class WebInterface {
 	private {
 		Controller m_ctrl;
 		VibeNewsSettings m_settings;
-		UserManWebInterface m_userMan;
+		UserManWebAuthenticator m_userAuth;
 		size_t m_postsPerPage = 10;
 	}
 
@@ -51,7 +51,7 @@ class WebInterface {
 	{
 		m_ctrl = ctrl;
 		m_settings = ctrl.settings;
-		m_userMan = new UserManWebInterface(ctrl.userManController);
+		m_userAuth = new UserManWebAuthenticator(ctrl.userManController);
 	}
 
 	void listen()
@@ -70,8 +70,8 @@ class WebInterface {
 	void register(URLRouter router)
 	{
 		router.get("/", &showIndex);
-		router.get("/profile", m_userMan.auth(&showEditProfile));
-		router.post("/profile", m_userMan.auth(&updateProfile));
+		router.get("/profile", m_userAuth.auth(&showEditProfile));
+		router.post("/profile", m_userAuth.auth(&updateProfile));
 		router.post("/markup", &markupArticle);
 		router.get("/groups", staticRedirect("/"));
 		router.get("/groups/", staticRedirect("/"));
@@ -87,7 +87,7 @@ class WebInterface {
 			settings.serverPathPrefix = router.prefix;
 		router.get("*", serveStaticFiles("public", settings));
 
-		m_userMan.register(router);
+		registerUserManWebInterface(router, m_ctrl.userManController);
 	}
 
 	void showIndex(HTTPServerRequest req, HTTPServerResponse res)
@@ -101,8 +101,9 @@ class WebInterface {
 
 		string[] authTags;
 		if( req.session && req.session.isKeySet("userEmail") ){
-			auto usr = m_ctrl.getUserByEmail(req.session["userEmail"]);
-			authTags = usr.groups;
+			auto usr = m_ctrl.getUserByEmail(req.session.get!string("userEmail"));
+			foreach (g; usr.groups)
+				authTags ~= m_ctrl.getAuthGroup(g).name;
 		}
 
 		Group[] groups;
@@ -154,7 +155,7 @@ class WebInterface {
 	void updateProfile(HTTPServerRequest req, HTTPServerResponse res, User user)
 	{
 		try {
-			m_userMan.updateProfile(user, req);
+			.updateProfile(m_ctrl.userManController, user, req);
 
 			// TODO: notifications
 		} catch(Exception e){
@@ -306,11 +307,11 @@ class WebInterface {
 		if( req.session ){
 			if( req.session.isKeySet("userEmail") ){
 				info.loggedIn = true;
-				info.name = req.session["userFullName"];
-				info.email = req.session["userEmail"];
+				info.name = req.session.get!string("userFullName");
+				info.email = req.session.get!string("userEmail");
 			} else {
-				info.name = req.session["lastUsedName"];
-				info.email = req.session["lastUsedEmail"];
+				info.name = req.session.get!string("lastUsedName");
+				info.email = req.session.get!string("lastUsedEmail");
 			}
 		}
 
@@ -351,13 +352,13 @@ class WebInterface {
 	{
 		auto grp = m_ctrl.getGroupByName(req.form["group"]);
 
-		BsonObjectID user_id;
+		User.ID user_id;
 		if( !enforceAuth(req, res, grp, true, &user_id) )
 			return;
 
 		bool loggedin = req.session && req.session.isKeySet("userEmail");
-		string email = loggedin ? req.session["userEmail"] : req.form["email"].strip();
-		string name = loggedin ? req.session["userFullName"] : req.form["name"].strip();
+		string email = loggedin ? req.session.get!string("userEmail") : req.form["email"].strip();
+		string name = loggedin ? req.session.get!string("userFullName") : req.form["name"].strip();
 		string subject = req.form["subject"].strip();
 		string message = req.form["message"];
 
@@ -415,8 +416,8 @@ class WebInterface {
 		}
 
 		if( !req.session ) req.session = res.startSession();
-		req.session["lastUsedName"] = name.idup;
-		req.session["lastUsedEmail"] = email.idup;
+		req.session.set("lastUsedName", name.idup);
+		req.session.set("lastUsedEmail", email.idup);
 
 		redirectToThreadPost(res, Path(req.path).parentPath.toString(), grp.name, art.groups[escapeGroup(grp.name)].articleNumber, art.groups[escapeGroup(grp.name)].threadId);
 	}
@@ -440,16 +441,17 @@ class WebInterface {
 		res.redirect(url, redirect_status_code);
 	}
 
-	bool enforceAuth(HTTPServerRequest req, HTTPServerResponse res, ref Group grp, bool read_write, BsonObjectID* user_id = null)
+	bool enforceAuth(HTTPServerRequest req, HTTPServerResponse res, ref Group grp, bool read_write, User.ID* user_id = null)
 	{
-		if( user_id ) *user_id = BsonObjectID();
-		BsonObjectID uid;
+		if( user_id ) *user_id = User.ID.init;
+		User.ID uid;
 		string[] authTags;
 		if( req.session && req.session.isKeySet("userEmail") ){
-			auto usr = m_ctrl.getUserByEmail(req.session["userEmail"]);
-			authTags = usr.groups;
-			if( user_id ) *user_id = usr._id;
-			uid = usr._id;
+			auto usr = m_ctrl.getUserByEmail(req.session.get!string("userEmail"));
+			foreach (g; usr.groups)
+				authTags ~= m_ctrl.getAuthGroup(g).name;
+			if( user_id ) *user_id = usr.id;
+			uid = usr.id;
 		}
 
 		if( grp.readOnlyAuthTags.empty && grp.readWriteAuthTags.empty )
@@ -465,7 +467,7 @@ class WebInterface {
 				break;
 			}
 		if( !found ){
-			if( uid == BsonObjectID() ){
+			if (uid == User.ID.init) {
 				res.redirect("/login?redirect="~urlEncode(req.requestURL));
 				return false;
 			} else {
