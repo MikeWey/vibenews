@@ -363,7 +363,7 @@ class WebInterface {
 		string message = req.form["message"];
 
 		if( !loggedin && !(req.form["confirmemail"].strip().empty) ){
-			res.redirect("/groups/"~grp.name~"/", HttpStatus.Found);
+			res.redirect("/groups/"~grp.name~"/", 302);
 			return;
 		}
 
