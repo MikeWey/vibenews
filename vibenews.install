@@ -1,0 +1,12 @@
+post_install() {
+  getent group www-vibe &>/dev/null || groupadd www-vibe >/dev/null
+  getent passwd www-vibe &>/dev/null || useradd -g www-vibe -d /var/empty -c 'Vibe.d' -s /bin/false www-vibe >/dev/null
+
+  true
+}
+
+post_remove() {
+  getent passwd www-vibe &>/dev/null && userdel www-vibe >/dev/null
+  getent group www-vibe &>/dev/null && groupdel www-vibe >/dev/null
+  true
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=The GtkD discussion group.
+Requires=mongodb.service
+After=mongodb.service
+
+[Service]
+ExecStart=/usr/local/bin/vibenews
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
