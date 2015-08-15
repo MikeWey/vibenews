@@ -45,7 +45,7 @@ class AdminInterface {
 
 		auto settings = new HTTPServerSettings;
 		settings.port = vnsettings.adminPort;
-		settings.bindAddresses = ["127.0.0.1"];
+		settings.bindAddresses = vnsettings.adminBindAddresses;
 
 		auto router = new URLRouter;
 		register(router);
@@ -210,9 +210,7 @@ class AdminInterface {
 		info.articleCount = cast(int)m_ctrl.getAllArticlesCount(info.groupname);
 		info.pageCount = (info.articleCount-1)/info.articlesPerPage + 1;
 
-		res.renderCompat!("vibenews.admin.listarticles.dt",
-			HTTPServerRequest, "req",
-			Info*, "info")(Variant(req), Variant(&info));
+		res.render!("vibenews.admin.listarticles.dt", req, info);
 	}
 
 	void activateArticle(HTTPServerRequest req, HTTPServerResponse res)
@@ -264,9 +262,7 @@ class AdminInterface {
 		info.itemCount = cast(int)m_ctrl.getUserCount();
 		info.pageCount = (info.itemCount-1)/info.itemsPerPage + 1;
 
-		res.renderCompat!("vibenews.admin.listusers.dt",
-			HTTPServerRequest, "req",
-			Info*, "info")(Variant(req), Variant(&info));
+		res.render!("vibenews.admin.listusers.dt", req, info);
 	}
 
 	void showUser(HTTPServerRequest req, HTTPServerResponse res)
@@ -279,10 +275,7 @@ class AdminInterface {
 		Info info;
 		info.settings = m_ctrl.settings;
 		info.user = getUserInfo(m_ctrl.getUser(User.ID.fromString(req.params["user"])), groups);
-		res.renderCompat!("vibenews.admin.edituser.dt",
-				HTTPServerRequest, "req",
-				Info*, "info"
-			)(req, &info);
+		res.render!("vibenews.admin.edituser.dt", req, info);
 	}
 
 	void updateUser(HTTPServerRequest req, HTTPServerResponse res)
