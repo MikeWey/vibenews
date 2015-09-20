@@ -1,4 +1,4 @@
-# Maintainer: Stefan Brand <seiichiro@seiichiro0185.org>
+# Maintainer: Mike Wey
 pkgname=vibenews
 pkgver=0.6.6
 pkgrel=1
