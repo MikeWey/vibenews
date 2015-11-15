@@ -1,7 +1,7 @@
 # Maintainer: Mike Wey
 pkgname=vibenews
 pkgver=0.6.6
-pkgrel=1
+pkgrel=2
 pkgdesc="The GtkD discussion group"
 arch=( 'x86_64' )
 url="https://github.com/MikeWey/vibenews/tree/gtkd"
