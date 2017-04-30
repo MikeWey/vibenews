@@ -79,15 +79,27 @@ a {
 
 }
 
+#mainHeader input, #mainHeader button, #mainNav input, #mainNav button {
+	box-sizing: border-box;
+	-moz-box-sizing: border-box;
+	-webkit-box-sizing: border-box;
+	height: 18pt;
+	margin-bottom: 2pt;
+}
+
+#mainHeader .loginArea:last-child a:first-of-type {
+	margin-right: 5pt;
+}
+
+#mainHeader .loginArea button { 
+	margin: 0pt;
+	white-space: nowrap;
+}
+
 #mainHeader a { color: #FFF; }
-
 #mainHeader table { width: 100%; }
-
-#mainHeader td { padding-left: 5pt; }
-
-#mainHeader .loginArea input { width: auto; }
-
-#mainHeader .loginArea button { margin: 0pt; }
+#mainHeader td { padding: 0; padding-left: 5pt; text-align: center; }
+#mainHeader .loginArea input { width: 100%; }
 
 /******************************************************************************/
 /* FOOTER                                                                     */
@@ -344,6 +356,7 @@ div.email2 {
 input, textarea {
 	width: 100%;
 	font-size: 10pt;
+	width: -moz-available;
 }
 
 .top-align { vertical-align: top; }
