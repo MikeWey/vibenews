@@ -1,7 +1,7 @@
 /**
 	(module summary)
 
-	Copyright: © 2012-2014 RejectedSoftware e.K.
+	Copyright: © 2012-2016 RejectedSoftware e.K.
 	License: Subject to the terms of the General Public License version 3, as written in the included LICENSE.txt file.
 	Authors: Sönke Ludwig
 */
@@ -14,7 +14,7 @@ import vibe.core.log;
 import vibe.core.net;
 import vibe.stream.counting;
 import vibe.stream.operations;
-import vibe.stream.ssl;
+import vibe.stream.tls;
 
 import std.algorithm;
 import std.conv;
@@ -26,7 +26,7 @@ void listenNNTP(NNTPServerSettings settings, void delegate(NNTPServerRequest, NN
 {
 	void handleNNTPConnection(TCPConnection conn)
 	{
-		Stream stream = conn;
+		StreamProxy stream = conn;
 
 		bool tls_active = false;
 
@@ -34,15 +34,15 @@ void listenNNTP(NNTPServerSettings settings, void delegate(NNTPServerRequest, NN
 
 		void acceptSsl()
 		{
-			SSLContext ctx;
+			TLSContext ctx;
 			if (settings.sslContext) ctx = settings.sslContext;
 			else {
-				ctx = createSSLContext(SSLContextKind.server);
+				ctx = createTLSContext(TLSContextKind.server);
 				ctx.useCertificateChainFile(settings._sslCertFile);
 				ctx.usePrivateKeyFile(settings._sslKeyFile);
 			}
 			logTrace("accepting SSL");
-			stream = createSSLStream(stream, ctx, SSLStreamState.accepting);
+			stream = createTLSStream(stream, ctx, TLSStreamState.accepting);
 			logTrace("accepted SSL");
 			tls_active = true;
 		}
@@ -53,7 +53,9 @@ void listenNNTP(NNTPServerSettings settings, void delegate(NNTPServerRequest, NN
 		logDebug("welcomed");
 
 		while(!stream.empty){
-			auto res = new NNTPServerResponse(stream);
+			OutputStreamProxy os;
+			os = stream;
+			auto res = new NNTPServerResponse(os);
 			logTrace("waiting for request");
 			auto ln = cast(string)stream.readLine();
 			logDebug("REQUEST: %s", !ln.startsWith("AUTHINFO") ? ln : "AUTHINFO (...)");
@@ -103,7 +105,9 @@ void listenNNTP(NNTPServerSettings settings, void delegate(NNTPServerRequest, NN
 				acceptSsl();
 			}
 
-			auto req = new NNTPServerRequest(stream);
+			InputStreamProxy is_;
+			is_ = stream;
+			auto req = new NNTPServerRequest(is_);
 			req.command = cmd;
 			req.parameters = params;
 			req.peerAddress = conn.peerAddress;
@@ -142,7 +146,7 @@ class NNTPServerSettings {
 	ushort port = 119; // SSL port is 563
 	string[] bindAddresses = ["0.0.0.0", "::"];
 	string host = "localhost"; // host name
-	SSLContext sslContext;
+	TLSContext sslContext;
 	bool requireSSL = false; // require STARTTLS on unencrypted connections
 
 	deprecated @property ref inout(bool) enableSsl() inout { return _enableSsl; }
@@ -160,7 +164,7 @@ deprecated alias NntpServerSettings = NNTPServerSettings;
 
 class NNTPServerRequest {
 	private {
-		InputStream m_stream;
+		InputStreamProxy m_stream;
 		NNTPBodyReader m_reader;
 	}
 
@@ -168,7 +172,7 @@ class NNTPServerRequest {
 	string[] parameters;
 	string peerAddress;
 
-	this(InputStream str)
+	this(InputStreamProxy str)
 	{
 		m_stream = str;
 	}
@@ -199,7 +203,7 @@ deprecated alias NntpServerRequest = NNTPServerRequest;
 
 class NNTPServerResponse {
 	private {
-		OutputStream m_stream;
+		OutputStreamProxy m_stream;
 		NNTPBodyWriter m_bodyWriter;
 		bool m_headerWritten = false;
 		bool m_bodyWritten = false;
@@ -208,7 +212,7 @@ class NNTPServerResponse {
 	int status;
 	string statusText;
 
-	this(OutputStream stream)
+	this(OutputStreamProxy stream)
 	{
 		m_stream = stream;
 	}

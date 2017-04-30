@@ -3,6 +3,7 @@ extends vibenews.web.layout
 block title
 	- import vibe.textfilter.markdown;
 	- import vibe.textfilter.html;
+	- import std.string : indexOf;
 
 	- auto title = info.thread.subject;
 
@@ -37,6 +38,7 @@ block vibenews.body
 						span.active-page= i+1
 					- else
 						a.page(href="?page=#{i+1}")= i+1
+					|  
 
 	- pageLinks();
 
@@ -56,9 +58,8 @@ block vibenews.body
 						a(href="mailto:#{obfuscateEmail(post.poster.email)}")= post.poster.name
 					
 					.posting-info Posted #{post.date}
-						- if( post.repliedToPoster.email.length )
-							| in reply to
-							a(href="../../post/#{post.repliedToPostNumber}")= post.repliedToPoster.name
+						- if (post.repliedToPoster.email.length)
+							|  in reply to #[a(href="../../post/#{post.repliedToPostNumber}")= post.repliedToPoster.name]
 					a.reply-link.link-button(href="../../../post?group=#{info.group.name}&amp;thread=#{info.thread.firstPost.number}&amp;reply-to=#{post.number}") Reply
 				.post-content
 					!= filterMarkdown(post.message, MarkdownFlags.forumDefault)

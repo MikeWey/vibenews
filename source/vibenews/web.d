@@ -22,10 +22,12 @@ import vibe.http.router;
 import vibe.http.server;
 import vibe.http.fileserver;
 import vibe.inet.message;
+import vibe.inet.path;
 import vibe.textfilter.markdown;
 import vibe.textfilter.urlencode;
 import vibe.utils.string;
 import vibe.utils.validation;
+import vibe.web.web;
 
 import std.algorithm : canFind, filter, map, sort;
 import std.array;
@@ -37,6 +39,61 @@ import std.exception;
 import std.string;
 import std.utf;
 import std.variant;
+
+
+void startVibeNewsWebFrontend(Controller ctrl)
+{
+	auto settings = new HTTPServerSettings;
+	settings.port = ctrl.settings.webPort;
+	settings.bindAddresses = ctrl.settings.webBindAddresses;
+	settings.sessionStore = new MemorySessionStore;
+
+	auto router = new URLRouter;
+	router.registerVibeNewsWebFrontend(ctrl);
+
+	listenHTTP(settings, router);
+}
+
+void registerVibeNewsWebFrontend(URLRouter router, Controller ctrl)
+{
+	auto web = new WebInterface(ctrl);
+	router.registerWebInterface(web);
+
+	auto settings = new HTTPFileServerSettings;
+	static if (is(typeof(router.prefix))) // vibe.d 0.7.20 and up
+		settings.serverPathPrefix = router.prefix;
+	router.get("*", serveStaticFiles("public", settings));
+
+	registerUserManWebInterface(router, ctrl.userManController);
+}
+
+
+deprecated("Use startVibeNewsWebFrontend instead.")
+void listen(WebInterface intf)
+{
+	auto settings = new HTTPServerSettings;
+	settings.port = intf.m_settings.webPort;
+	settings.bindAddresses = intf.m_settings.webBindAddresses;
+	settings.sessionStore = new MemorySessionStore;
+
+	auto router = new URLRouter;
+	register(intf, router);
+
+	listenHTTP(settings, router);
+}
+
+deprecated("Use registerVibeNewsWebFrontend instead.")
+void register(WebInterface intf, URLRouter router)
+{
+	router.registerWebInterface(intf);
+
+	auto settings = new HTTPFileServerSettings;
+	static if (is(typeof(router.prefix))) // vibe.d 0.7.20 and up
+		settings.serverPathPrefix = router.prefix;
+	router.get("*", serveStaticFiles("public", settings));
+
+	registerUserManWebInterface(router, intf.m_ctrl.userManController);
+}
 
 
 class WebInterface {
@@ -54,43 +111,7 @@ class WebInterface {
 		m_userAuth = new UserManWebAuthenticator(ctrl.userManController);
 	}
 
-	void listen()
-	{
-		auto settings = new HTTPServerSettings;
-		settings.port = m_settings.webPort;
-		settings.bindAddresses = m_settings.webBindAddresses;
-		settings.sessionStore = new MemorySessionStore;
-
-		auto router = new URLRouter;
-		register(router);
-
-		listenHTTP(settings, router);
-	}
-
-	void register(URLRouter router)
-	{
-		router.get("/", &showIndex);
-		router.get("/profile", m_userAuth.auth(&showEditProfile));
-		router.post("/profile", m_userAuth.auth(&updateProfile));
-		router.post("/markup", &markupArticle);
-		router.get("/groups", staticRedirect("/"));
-		router.get("/groups/", staticRedirect("/"));
-		router.get("/groups/:group/", &showGroup);
-		router.get("/groups/post", &showPostArticle);
-		router.post("/groups/post", &postArticle);
-		router.get("/groups/:group/thread/:thread/", &showThread);
-		router.get("/groups/:group/post/:post", &showPost);
-		router.get("/groups/:group/thread/:thread/:post", &redirectShowPost); // deprecated
-
-		auto settings = new HTTPFileServerSettings;
-		static if (is(typeof(router.prefix))) // vibe.d 0.7.20 and up
-			settings.serverPathPrefix = router.prefix;
-		router.get("*", serveStaticFiles("public", settings));
-
-		registerUserManWebInterface(router, m_ctrl.userManController);
-	}
-
-	void showIndex(HTTPServerRequest req, HTTPServerResponse res)
+	void get(HTTPServerRequest req, HTTPServerResponse res)
 	{
 		static struct Info1 {
 			VibeNewsSettings settings;
@@ -101,18 +122,20 @@ class WebInterface {
 
 		string[] authTags;
 		if( req.session && req.session.isKeySet("userEmail") ){
-			auto usr = m_ctrl.getUserByEmail(req.session.get!string("userEmail"));
+			auto email = req.session.get!string("userEmail");
+			assert(m_ctrl !is null);
+			auto usr = m_ctrl.getUserByEmail(email);
 			foreach (g; usr.groups)
 				authTags ~= m_ctrl.getAuthGroup(g).name;
 		}
 
 		Group[] groups;
 		m_ctrl.enumerateGroups((idx, grp){
-			auto alltags = grp.readOnlyAuthTags ~ grp.readWriteAuthTags;
-			if( alltags.length > 0 ){
+			auto alltags = grp.readOnlyAuthTags;
+			if (alltags.length > 0) {
 				bool found = false;
-				foreach( t; alltags )
-					if( authTags.canFind(t) ){
+				foreach (t; alltags)
+					if (authTags.canFind(t)) {
 						found = true;
 						break;
 					}
@@ -120,163 +143,62 @@ class WebInterface {
 			}
 			groups ~= grp;
 		});
-		m_ctrl.enumerateGroupCategories((idx, cat){ info.categories ~= Category(cat, groups, m_ctrl); });
+		m_ctrl.enumerateGroupCategories((idx, cat) @trusted { info.categories ~= Category(cat, groups, m_ctrl); });
 
 		if( !info.categories.length ) info.categories ~= Category("All", groups, m_ctrl);
 
 		info.categories.sort!"a.index < b.index"();
 
-		res.render!("vibenews.web.index.dt", req, info);
+		render!("vibenews.web.index.dt", info);
 	}
 
-	void showEditProfile(HTTPServerRequest req, HTTPServerResponse res, User user)
+	void getGroups()
+	{
+		redirect("/");
+	}
+
+	@auth
+	void getProfile(HTTPServerRequest req, User user, string _error = null)
 	{
 		struct Info {
 			VibeNewsSettings settings;
 			Group[] groups;
+			string error;
 		}
 
 		enforceHTTP(req.session && req.session.isKeySet("userEmail"), HTTPStatus.forbidden, "Please log in to change your profile information.");
 
 		Info info;
 		info.settings = m_settings;
+		info.error = _error;
 		req.form["email"] = user.email;
 		req.form["full_name"] = user.fullName;
+		if (_error.length) req.params["error"] = _error;
 
 		m_ctrl.enumerateGroups((idx, grp){ info.groups ~= grp; });
 
-		res.render!("vibenews.web.edit_profile.dt", req, info);
+		render!("vibenews.web.edit_profile.dt", info);
 	}
 
-	void updateProfile(HTTPServerRequest req, HTTPServerResponse res, User user)
+	@auth @errorDisplay!getProfile
+	void postProfile(HTTPServerRequest req, User user)
 	{
-		try {
-			.updateProfile(m_ctrl.userManController, user, req);
+		.updateProfile(m_ctrl.userManController, user, req);
 
-			// TODO: notifications
-		} catch(Exception e){
-			req.params["error"] = e.msg;
-			showEditProfile(req, res, user);
-			return;
-		}
+		// TODO: notifications
 
-		res.redirect(req.path);
+		redirect(req.path);
 	}
 
-	void showGroup(HTTPServerRequest req, HTTPServerResponse res)
-	{
-		auto grp = m_ctrl.getGroupByName(req.params["group"]);
-
-		if( !enforceAuth(req, res, grp, false) )
-			return;
-
-		static struct Info2 {
-			VibeNewsSettings settings;
-			GroupInfo group;
-			ThreadInfo[] threads;
-			size_t page = 0;
-			size_t pageSize = 10;
-			size_t pageCount;
-		}
-		Info2 info;
-		info.settings = m_settings;
-		if( auto ps = "page" in req.query ) info.page = to!size_t(*ps)-1;
-
-		info.group = GroupInfo(grp, m_ctrl);
-		m_ctrl.enumerateThreads(grp._id, info.page*info.pageSize, info.pageSize, (idx, thr){
-			info.threads ~= ThreadInfo(thr, m_ctrl, info.pageSize, grp.name);
-		});
-		
-		info.pageCount = (info.group.numberOfTopics + info.pageSize-1) / info.pageSize;
-
-		res.render!("vibenews.web.view_group.dt", req, info);
-	}
-
-	void showThread(HTTPServerRequest req, HTTPServerResponse res)
-	{
-		auto grp = m_ctrl.getGroupByName(req.params["group"]);
-
-		if( !enforceAuth(req, res, grp, false) )
-			return;
-
-		static struct Info3 {
-			VibeNewsSettings settings;
-			GroupInfo group;
-			PostInfo[] posts;
-			ThreadInfo thread;
-			size_t page;
-			size_t postCount;
-			size_t pageSize = 10;
-			size_t pageCount;
-		}
-
-		Info3 info;
-		info.settings = m_settings;
-		info.pageSize = m_postsPerPage;
-		auto threadnum = req.params["thread"].to!long();
-		if( auto ps = "page" in req.query ) info.page = to!size_t(*ps) - 1;
-		try info.thread = ThreadInfo(m_ctrl.getThreadForFirstArticle(grp.name, threadnum), m_ctrl, info.pageSize, grp.name);
-		catch( Exception e ){
-			redirectToThreadPost(res, (Path(req.path) ~ "../../../").toString(), grp.name, threadnum);
-			return;
-		}
-		info.group = GroupInfo(grp, m_ctrl);
-		info.postCount = info.thread.postCount;
-		info.pageCount = info.thread.pageCount;
-
-		m_ctrl.enumerateThreadPosts(info.thread.id, grp.name, info.page*info.pageSize, info.pageSize, (idx, art){
-			Article replart;
-			try replart = m_ctrl.getArticle(art.getHeader("In-Reply-To"));
-			catch( Exception ){}
-			info.posts ~= PostInfo(art, replart, info.group.name);
-		});
-
-		res.render!("vibenews.web.view_thread.dt", req, info);
-	}
-
-	void showPost(HTTPServerRequest req, HTTPServerResponse res)
-	{
-		auto grp = m_ctrl.getGroupByName(req.params["group"]);
-
-		if( !enforceAuth(req, res, grp, false) )
-			return;
-
-		static struct Info4 {
-			VibeNewsSettings settings;
-			GroupInfo group;
-			PostInfo post;
-			ThreadInfo thread;
-		}
-
-		auto postnum = req.params["post"].to!long();
-
-		Info4 info;
-		info.settings = m_settings;
-		info.group = GroupInfo(grp, m_ctrl);
-
-		auto art = m_ctrl.getArticle(grp.name, postnum);
-		Article replart;
-		try replart = m_ctrl.getArticle(art.getHeader("In-Reply-To"));
-		catch( Exception ){}
-		info.post = PostInfo(art, replart, info.group.name);
-		info.thread = ThreadInfo(m_ctrl.getThread(art.groups[escapeGroup(grp.name)].threadId), m_ctrl, 0, grp.name);
-
-		res.render!("vibenews.web.view_post.dt", req, info);
-	}
-
-	void redirectShowPost(HTTPServerRequest req, HTTPServerResponse res)
-	{
-		res.redirect((Path(req.path)~"../../../post/"~req.params["post"]).toString(), HTTPStatus.movedPermanently);
-	}
-
-	void showPostArticle(HTTPServerRequest req, HTTPServerResponse res)
+	@path("/groups/post")
+	void getPostArticle(HTTPServerRequest req, HTTPServerResponse res, string _error = null)
 	{
 		string groupname;
 		if( auto pg = "group" in req.query ) groupname = *pg;
 		else groupname = req.form["group"];
 		auto grp = m_ctrl.getGroupByName(groupname);
 
-		if( !enforceAuth(req, res, grp, true) )
+		if (!enforceAuth(req, res, grp, true))
 			return;
 
 		static struct Info5 {
@@ -320,25 +242,19 @@ class WebInterface {
 		info.group = GroupInfo(grp, m_ctrl);
 
 		// recover old values if showPostArticle was called because of an error
-		if( auto per = "error" in req.params ) info.error = *per;
+		info.error = _error;
 		if( auto pnm = "name" in req.form ) info.name = *pnm;
 		if( auto pem = "email" in req.form ) info.email = *pem;
 		if( auto psj = "subject" in req.form ) info.subject = *psj;
 		if( auto pmg = "message" in req.form ) info.message = *pmg;
 
-		res.render!("vibenews.web.reply.dt", req, info);
+		render!("vibenews.web.reply.dt", info);
 	}
 
-	void markupArticle(HTTPServerRequest req, HTTPServerResponse res)
+	@path("/groups/post") @errorDisplay!getPostArticle
+	void postArticle(HTTPServerRequest req, HTTPServerResponse res, string group, string subject, string message)
 	{
-		auto msg = req.form["message"];
-		validateString(msg, 0, 128*1024, "The message body");
-		res.writeBody(filterMarkdown(msg, MarkdownFlags.forumDefault), "text/html");
-	}
-
-	void postArticle(HTTPServerRequest req, HTTPServerResponse res)
-	{
-		auto grp = m_ctrl.getGroupByName(req.form["group"]);
+		auto grp = m_ctrl.getGroupByName(group);
 
 		User.ID user_id;
 		if( !enforceAuth(req, res, grp, true, &user_id) )
@@ -347,27 +263,19 @@ class WebInterface {
 		bool loggedin = req.session && req.session.isKeySet("userEmail");
 		string email = loggedin ? req.session.get!string("userEmail") : req.form["email"].strip();
 		string name = loggedin ? req.session.get!string("userFullName") : req.form["name"].strip();
-		string subject = req.form["subject"].strip();
-		string message = req.form["message"];
 
 		if( !loggedin && !(req.form["confirmemail"].strip().empty) ){
 			res.redirect("/groups/"~grp.name~"/", 302);
 			return;
 		}
 
-		try {
-			validateEmail(email);
-			validateString(name, 3, 64, "The poster name");
-			validateString(subject, 1, 128, "The message subject");
-			validateString(message, 0, 128*1024, "The message body");
+		validateEmail(email);
+		validateString(name, 3, 64, "The poster name");
+		validateString(subject, 1, 128, "The message subject");
+		validateString(message, 1, 128*1024, "The message body");
 
-			if( !loggedin ){
-				enforce(!m_ctrl.isEmailRegistered(email), "The email address is already in use by a registered account. Please log in to use it.");
-			}
-		} catch(Exception e){
-			req.params["error"] = e.msg;
-			showPostArticle(req, res);
-			return;
+		if( !loggedin ){
+			enforce(!m_ctrl.isEmailRegistered(email), "The email address is already in use by a registered account. Please log in to use it.");
 		}
 
 		Article art;
@@ -396,12 +304,7 @@ class WebInterface {
 		else art.peerAddress = [req.peer];
 		art.message = cast(ubyte[])(message ~ "\r\n");
 
-		try m_ctrl.postArticle(art, user_id);
-		catch( Exception e ){
-			req.params["error"] = e.msg;
-			showPostArticle(req, res);
-			return;
-		}
+		m_ctrl.postArticle(art, user_id);
 
 		if( !req.session ) req.session = res.startSession();
 		req.session.set("lastUsedName", name.idup);
@@ -410,7 +313,122 @@ class WebInterface {
 		redirectToThreadPost(res, Path(req.path).parentPath.toString(), grp.name, art.groups[escapeGroup(grp.name)].articleNumber, art.groups[escapeGroup(grp.name)].threadId);
 	}
 
-	void redirectToThreadPost(HTTPServerResponse res, string groups_path, string groupname, long article_number, BsonObjectID thread_id = BsonObjectID(), HTTPStatus redirect_status_code = HTTPStatus.Found)
+	@path("/groups/:group/")
+	void getGroup(HTTPServerRequest req, HTTPServerResponse res, string _group)
+	{
+		auto grp = m_ctrl.getGroupByName(_group);
+
+		if( !enforceAuth(req, res, grp, false) )
+			return;
+
+		static struct Info2 {
+			VibeNewsSettings settings;
+			GroupInfo group;
+			ThreadInfo[] threads;
+			size_t page = 0;
+			size_t pageSize = 10;
+			size_t pageCount;
+		}
+		Info2 info;
+		info.settings = m_settings;
+		if( auto ps = "page" in req.query ) info.page = to!size_t(*ps)-1;
+
+		info.group = GroupInfo(grp, m_ctrl);
+		m_ctrl.enumerateThreads(grp._id, info.page*info.pageSize, info.pageSize, (idx, thr) @trusted {
+			info.threads ~= ThreadInfo(thr, m_ctrl, info.pageSize, grp.name);
+		});
+		
+		info.pageCount = (info.group.numberOfTopics + info.pageSize-1) / info.pageSize;
+
+		res.render!("vibenews.web.view_group.dt", req, info);
+	}
+
+	@path("/groups/:group/thread/:thread/")
+	void getThread(HTTPServerRequest req, HTTPServerResponse res, string _group, long _thread)
+	{
+		auto grp = m_ctrl.getGroupByName(_group);
+
+		if( !enforceAuth(req, res, grp, false) )
+			return;
+
+		static struct Info3 {
+			VibeNewsSettings settings;
+			GroupInfo group;
+			PostInfo[] posts;
+			ThreadInfo thread;
+			size_t page;
+			size_t postCount;
+			size_t pageSize = 10;
+			size_t pageCount;
+		}
+
+		Info3 info;
+		info.settings = m_settings;
+		info.pageSize = m_postsPerPage;
+		if( auto ps = "page" in req.query ) info.page = to!size_t(*ps) - 1;
+		try info.thread = ThreadInfo(m_ctrl.getThreadForFirstArticle(grp.name, _thread), m_ctrl, info.pageSize, grp.name);
+		catch( Exception e ){
+			redirectToThreadPost(res, (Path(req.path) ~ "../../../").toString(), grp.name, _thread);
+			return;
+		}
+		info.group = GroupInfo(grp, m_ctrl);
+		info.postCount = info.thread.postCount;
+		info.pageCount = info.thread.pageCount;
+
+		m_ctrl.enumerateThreadPosts(info.thread.id, grp.name, info.page*info.pageSize, info.pageSize, (idx, art) @trusted {
+			Article replart;
+			try replart = m_ctrl.getArticle(art.getHeader("In-Reply-To"));
+			catch( Exception ){}
+			info.posts ~= PostInfo(art, replart, info.group.name);
+		});
+
+		res.render!("vibenews.web.view_thread.dt", req, info);
+	}
+
+	@path("/groups/:group/post/:post")
+	void getPost(HTTPServerRequest req, HTTPServerResponse res, string _group, long _post)
+	{
+		auto grp = m_ctrl.getGroupByName(_group);
+
+		if( !enforceAuth(req, res, grp, false) )
+			return;
+
+		static struct Info4 {
+			VibeNewsSettings settings;
+			GroupInfo group;
+			PostInfo post;
+			ThreadInfo thread;
+		}
+
+		Info4 info;
+		info.settings = m_settings;
+		info.group = GroupInfo(grp, m_ctrl);
+
+		auto art = m_ctrl.getArticle(grp.name, _post);
+		Article replart;
+		try replart = m_ctrl.getArticle(art.getHeader("In-Reply-To"));
+		catch( Exception ){}
+		info.post = PostInfo(art, replart, info.group.name);
+		info.thread = ThreadInfo(m_ctrl.getThread(art.groups[escapeGroup(grp.name)].threadId), m_ctrl, 0, grp.name);
+
+		res.render!("vibenews.web.view_post.dt", req, info);
+	}
+
+	// deprecated
+	@path("/groups/:group/thread/:thread/:post")
+	void getRedirectShowPost(HTTPServerRequest req, HTTPServerResponse res, string _group, long _thread, string _post)
+	{
+		res.redirect((Path(req.path)~"../../../post/"~_post).toString(), HTTPStatus.movedPermanently);
+	}
+
+
+	void postMarkup(HTTPServerRequest req, HTTPServerResponse res, string message)
+	{
+		validateString(message, 0, 128*1024, "The message body");
+		res.writeBody(filterMarkdown(message, MarkdownFlags.forumDefault), "text/html");
+	}
+
+	private void redirectToThreadPost(HTTPServerResponse res, string groups_path, string groupname, long article_number, BsonObjectID thread_id = BsonObjectID(), HTTPStatus redirect_status_code = HTTPStatus.Found)
 	{
 		if( thread_id == BsonObjectID() ){
 			auto refs = m_ctrl.getArticleGroupRefs(groupname, article_number);
@@ -429,18 +447,22 @@ class WebInterface {
 		res.redirect(url, redirect_status_code);
 	}
 
-	bool enforceAuth(HTTPServerRequest req, HTTPServerResponse res, ref Group grp, bool read_write, User.ID* user_id = null)
+	private bool enforceAuth(HTTPServerRequest req, HTTPServerResponse res, ref Group grp, bool read_write, User.ID* user_id = null)
 	{
 		if( user_id ) *user_id = User.ID.init;
 		User.ID uid;
 		string[] authTags;
 		if( req.session && req.session.isKeySet("userEmail") ){
-			auto usr = m_ctrl.getUserByEmail(req.session.get!string("userEmail"));
+			auto email = req.session.get!string("userEmail");
+			auto usr = m_ctrl.getUserByEmail(email);
 			foreach (g; usr.groups)
 				authTags ~= m_ctrl.getAuthGroup(g).name;
 			if( user_id ) *user_id = usr.id;
 			uid = usr.id;
 		}
+
+		if (!read_write && grp.readOnlyAuthTags.empty)
+			return true;
 
 		if( grp.readOnlyAuthTags.empty && grp.readWriteAuthTags.empty )
 			return true;
@@ -449,8 +471,8 @@ class WebInterface {
 		if( !read_write ) alltags ~= grp.readOnlyAuthTags;
 
 		bool found = false;
-		foreach( t; alltags )
-			if( authTags.canFind(t) ){
+		foreach (t; alltags)
+			if (authTags.canFind(t)) {
 				found = true;
 				break;
 			}
@@ -463,6 +485,15 @@ class WebInterface {
 			}
 		}
 		return true;
+	}
+
+	enum auth = before!performAuth("user");
+
+	mixin PrivateAccessProxy;
+
+	private User performAuth(HTTPServerRequest req, HTTPServerResponse res)
+	{
+		return m_userAuth.performAuth(req, res);
 	}
 }
 
