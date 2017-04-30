@@ -85,7 +85,7 @@ a {
 
 #mainHeader td { padding-left: 5pt; }
 
-#mainHeader .loginArea input { width: 100%; }
+#mainHeader .loginArea input { width: auto; }
 
 #mainHeader .loginArea button { margin: 0pt; }
 
