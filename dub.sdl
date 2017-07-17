@@ -19,3 +19,5 @@ configuration "unittest" {
 	targetType "library"
 	excludedSourceFiles "source/app.d"
 }
+
+versions "VibeNoSSL"

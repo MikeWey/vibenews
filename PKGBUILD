@@ -1,12 +1,12 @@
 # Maintainer: Mike Wey
 pkgname=vibenews
 pkgver=0.8.0
-pkgrel=1
+pkgrel=2
 pkgdesc="The GtkD discussion group"
 arch=( 'x86_64' )
 url="https://github.com/MikeWey/vibenews/tree/gtkd"
 license=('AGPL-3.0')
-depends=('mongodb' 'libevent' 'openssl-1.0')
+depends=('mongodb' 'libevent')
 makedepends=('d-compiler' 'dub')
 conflicts=()
 install=$pkgname.install
