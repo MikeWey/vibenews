@@ -139,7 +139,7 @@ void listenNNTP(NNTPServerSettings settings, void delegate(NNTPServerRequest, NN
 	}
 }
 
-deprecated alias listenNNTP = listenNNTP;
+//deprecated alias listenNNTP = listenNNTP;
 
 
 class NNTPServerSettings {
