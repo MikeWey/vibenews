@@ -84,30 +84,30 @@ class Controller {
 			m_groups.update([k: ["$exists": false]], ["$set": [k: v]], UpdateFlags.MultiUpdate);
 		}
 
-		// upgrade old peerAddress format
-		foreach (art; m_articles.find(["$where" : "!Array.isArray(this.peerAddress)"], ["peerAddress": 1]))
-			m_articles.update(["_id": art["_id"]], ["$set": ["peerAddress": art["peerAddress"].get!string.split(",").map!strip().array()]]);
+		// // upgrade old peerAddress format
+		// foreach (art; m_articles.find(["$where" : "!Array.isArray(this.peerAddress)"], ["peerAddress": 1]))
+		// 	m_articles.update(["_id": art["_id"]], ["$set": ["peerAddress": art["peerAddress"].get!string.split(",").map!strip().array()]]);
 
-		// upgrade missing posterEmail field
-		foreach (bart; m_articles.find(["posterEmail": ["$exists": false]])) () @safe {
-			Article art;
-			art._id = bart["_id"].get!BsonObjectID;
-			art.headers = deserializeBson!(ArticleHeader[])(bart["headers"]);
-			string name, email;
-			decodeEmailAddressHeader(art.getHeader("From"), name, email);
-			m_articles.update(["_id": art._id], ["$set": ["posterEmail": email]]);
-		} ();
+		// // upgrade missing posterEmail field
+		// foreach (bart; m_articles.find(["posterEmail": ["$exists": false]])) () @safe {
+		// 	Article art;
+		// 	art._id = bart["_id"].get!BsonObjectID;
+		// 	art.headers = deserializeBson!(ArticleHeader[])(bart["headers"]);
+		// 	string name, email;
+		// 	decodeEmailAddressHeader(art.getHeader("From"), name, email);
+		// 	m_articles.update(["_id": art._id], ["$set": ["posterEmail": email]]);
+		// } ();
 
-		// fix missing Date headers
-		foreach (bart; m_articles.find(["headers": ["$not": ["$elemMatch": ["key": "Date"]]]], ["headers": true])) {
-			Article art;
-			art._id = bart["_id"].get!BsonObjectID;
-			art.headers = deserializeBson!(ArticleHeader[])(bart["headers"]);
-			assert(!art.hasHeader("Date"));
-			art.addHeader("Date", art._id.timeStamp.toRFC822DateTimeString());
-			assert(art.hasHeader("Date"));
-			m_articles.update(["_id": art._id], ["$set": ["headers": art.headers]]);
-		}
+		// // fix missing Date headers
+		// foreach (bart; m_articles.find(["headers": ["$not": ["$elemMatch": ["key": "Date"]]]], ["headers": true])) {
+		// 	Article art;
+		// 	art._id = bart["_id"].get!BsonObjectID;
+		// 	art.headers = deserializeBson!(ArticleHeader[])(bart["headers"]);
+		// 	assert(!art.hasHeader("Date"));
+		// 	art.addHeader("Date", art._id.timeStamp.toRFC822DateTimeString());
+		// 	assert(art.hasHeader("Date"));
+		// 	m_articles.update(["_id": art._id], ["$set": ["headers": art.headers]]);
+		// }
 
 
 		// create indexes
