@@ -24,8 +24,8 @@ version(unittest) {} else
 shared static this()
 {
 	auto settings = new VibeNewsSettings;
-	//settings.spamFilters ~= new BlackListSpamFilter;
-	//settings.spamFilters ~= new BayesSpamFilter;
+	settings.spamFilters ~= new BlackListSpamFilter;
+	settings.spamFilters ~= new BayesSpamFilter;
 
 	if( existsFile("/etc/vibe/vibenews.conf") ){
 		auto data = stripUTF8Bom(cast(string)openFile("/etc/vibe/vibenews.conf").readAll());
